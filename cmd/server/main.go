@@ -16,7 +16,9 @@ func main() {
 	dbWrapper := &database.GormDatabase{DB: db}
 	ctx := context.Background()
 	logger, _ := zap.NewProduction()
-	defer logger.Sync()
+	defer func() {
+		_ = logger.Sync()
+	}()
 
 	//gin.SetMode(gin.ReleaseMode)
 	gin.SetMode(gin.DebugMode)

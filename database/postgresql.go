@@ -96,8 +96,9 @@ func NewDatabase() *gorm.DB {
 	}
 
 	// AutoMigrate models
-	database.AutoMigrate(&models.Company{})
-	database.AutoMigrate(&models.User{})
+	_ = database.AutoMigrate(&models.Company{})
+
+	_ = database.AutoMigrate(&models.User{})
 
 	return database
 }
