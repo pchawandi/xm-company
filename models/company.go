@@ -9,27 +9,27 @@ import (
 type Company struct {
 	ID uuid.UUID `gorm:"type:uuid;default:uuid_generate_v4();primaryKey" json:"id"` // UUID primary key
 
-	Name              string `gorm:"type:varchar(15);not null;unique" json:"name"` // Name (15 characters, unique, required)
-	Description       string `gorm:"type:varchar(3000)" json:"description"`        // Description (optional, up to 3000 characters)
-	AmountOfEmployees int    `gorm:"not null" json:"amount_of_employees"`          // Amount of Employees (required)
-	Registered        bool   `gorm:"not null" json:"registered"`                   // Registered (boolean, required)
-	Type              string `gorm:"type:company_type;not null" json:"type"`
+	Name              string `json:"name" validate:"required,max=15"`                            // Required, max length 15
+	Description       string `json:"description" validate:"max=3000"`                            // Optional, max length 3000
+	Type              string `gorm:"type:company_type;not null" json:"type" validate:"required"` // Required
+	Registered        bool   `json:"registered" validate:"required"`                             // Required
+	AmountOfEmployees int    `json:"amount_of_employees" validate:"required,min=1"`              // Required, at least 1
 
 	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
 type CreateCompanyRequest struct {
-	Name              string `gorm:"type:varchar(15);not null;unique" json:"name"` // Name (15 characters, unique, required)
-	Description       string `gorm:"type:varchar(3000)" json:"description"`        // Description (optional, up to 3000 characters)
-	AmountOfEmployees int    `gorm:"not null" json:"amount_of_employees"`          // Amount of Employees (required)
-	Registered        bool   `gorm:"not null" json:"registered"`                   // Registered (boolean, required)
-	Type              string `gorm:"type:company_type;not null" json:"type"`       // Type (required, enum)
+	Name              string `json:"name" validate:"required,max=15"`                             // Required, max length 15
+	Description       string `json:"description" validate:"max=3000"`                             // Optional, max length 3000
+	Type              string `gorm:"type:company_type;not null"  json:"type" validate:"required"` // Required
+	Registered        bool   `json:"registered" validate:"required"`                              // Required
+	AmountOfEmployees int    `json:"amount_of_employees" validate:"required,min=1"`               // Required, at least 1
 }
 
 type UpdateCompanyRequest struct {
-	Description       *string `json:"description,omitempty"`         // Optional; use pointer to allow distinguishing between "not provided" and "empty"
-	AmountOfEmployees *int    `json:"amount_of_employees,omitempty"` // Optional; pointer for the same reason
-	Registered        *bool   `json:"registered,omitempty"`          // Optional; pointer for the same reason
-	Type              *string `json:"type,omitempty"`                // Optional; pointer to validate presence
+	Description       *string `json:"description,omitempty" validate:"max=3000"`                   // Optional; max length 3000
+	Type              *string `gorm:"type:company_type;not null"  json:"type" validate:"required"` // Required
+	Registered        *bool   `json:"registered" validate:"required"`                              // Required
+	AmountOfEmployees *int    `json:"amount_of_employees" validate:"required,min=1"`               // Required, at least 1
 }

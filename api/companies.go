@@ -11,7 +11,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+
+	"github.com/go-playground/validator/v10"
 )
+
+var validate = validator.New() // Initialize the validator
 
 // CompanyRepository defines the repository interface
 type CompanyRepository interface {
@@ -39,8 +43,14 @@ func NewCompanyRepository(ctx context.Context, db database.Database, logger *zap
 // Create handles creating a new company
 func (r *companyRepository) Create(c *gin.Context) {
 	var input models.CreateCompanyRequest
+
 	if err := c.ShouldBindJSON(&input); err != nil {
 		r.respondWithError(c, http.StatusBadRequest, "invalid input", err)
+		return
+	}
+
+	if err := validate.Struct(&input); err != nil {
+		r.respondWithError(c, http.StatusBadRequest, "validation failed", err)
 		return
 	}
 
@@ -100,7 +110,12 @@ func (r *companyRepository) Patch(c *gin.Context) {
 		return
 	}
 
-	updates := r.buildUpdateMap(input)
+	updates, err := r.buildUpdateMap(input)
+	if err != nil {
+		r.Logger.Error("failed to update company", zap.Error(err))
+		r.respondWithError(c, http.StatusBadRequest, "could not update company", err)
+		return
+	}
 
 	if err := r.DB.Model(&company).Updates(updates).Error; err != nil {
 		r.Logger.Error("failed to update company", zap.Error(err))
@@ -147,19 +162,30 @@ func (r *companyRepository) respondWithSuccess(c *gin.Context, status int, data 
 	c.JSON(status, gin.H{"data": data})
 }
 
-func (r *companyRepository) buildUpdateMap(input models.UpdateCompanyRequest) map[string]interface{} {
+func (r *companyRepository) buildUpdateMap(input models.UpdateCompanyRequest) (map[string]interface{}, error) {
 	updates := make(map[string]interface{})
 	if input.Description != nil {
+		if len(*input.Description) > 3000 {
+			return nil, errors.New("max characters allowed for description field is 3000")
+		}
 		updates["description"] = *input.Description
 	}
 	if input.AmountOfEmployees != nil {
+		if *input.AmountOfEmployees <= 0 {
+			return nil, errors.New("minimum value for amount of employes is 1")
+		}
 		updates["amount_of_employees"] = *input.AmountOfEmployees
 	}
 	if input.Registered != nil {
 		updates["registered"] = *input.Registered
 	}
 	if input.Type != nil {
+		// Proper value will be validated by postgres
 		updates["type"] = *input.Type
 	}
-	return updates
+	if len(updates) == 0 {
+		return nil, errors.New("no fields requested for update")
+	}
+
+	return updates, nil
 }

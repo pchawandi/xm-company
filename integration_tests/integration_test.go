@@ -91,7 +91,7 @@ func getJwtToken(username, role string) (string, error) {
 }
 
 // Create a new company
-func createCompany(jwtToken string, CName string, CType string) (map[string]interface{}, error) {
+func createCompany(jwtToken string, CName string, CType string, missingFields []string) (map[string]interface{}, error) {
 	url := fmt.Sprintf("%s/companies", baseURL)
 	client := &http.Client{}
 	authHeader := fmt.Sprintf("Bearer %s", jwtToken)
@@ -101,6 +101,11 @@ func createCompany(jwtToken string, CName string, CType string) (map[string]inte
 		"amount_of_employees": 100,
 		"registered":          true,
 		"type":                CType,
+	}
+
+	// Remove specified fields
+	for _, field := range missingFields {
+		delete(companyData, field)
 	}
 
 	companyBody, err := json.Marshal(companyData)
@@ -164,17 +169,17 @@ func getCompany(companyID, jwtToken string) (map[string]interface{}, error) {
 }
 
 // Update a company
-func updateCompany(companyID, jwtToken string) (map[string]interface{}, error) {
+func updateCompany(companyID, jwtToken string, updateFields map[string]interface{}) (map[string]interface{}, error) {
 	url := fmt.Sprintf("%s/companies/%s", baseURL, companyID)
 	client := &http.Client{}
 	authHeader := fmt.Sprintf("Bearer %s", jwtToken)
-	companyData := map[string]interface{}{
-		"description":         "Updated company description",
-		"amount_of_employees": 150,
-		"registered":          false,
-		"type":                "NonProfit",
-	}
-	companyBody, err := json.Marshal(companyData)
+	// companyData := map[string]interface{}{
+	// 	"description":         "Updated company description",
+	// 	"amount_of_employees": 150,
+	// 	"registered":          false,
+	// 	"type":                "NonProfit-1",
+	// }
+	companyBody, err := json.Marshal(updateFields)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +254,7 @@ func TestAPI_Positive_Cases(t *testing.T) {
 	adminToken := setupTestEnvironment(t)
 
 	t.Run("CreateCompany", func(t *testing.T) {
-		companyResponse, err := createCompany(adminToken, generateCompanyName(), "Corporations")
+		companyResponse, err := createCompany(adminToken, generateCompanyName(), "Corporations", []string{})
 		assert.NoError(t, err, "Failed to create company")
 
 		companyID := companyResponse["data"].(map[string]interface{})["id"].(string)
@@ -262,7 +267,7 @@ func TestAPI_Positive_Cases(t *testing.T) {
 
 	t.Run("GetCompany", func(t *testing.T) {
 		// Create a company to fetch
-		companyResponse, err := createCompany(adminToken, generateCompanyName(), "NonProfit")
+		companyResponse, err := createCompany(adminToken, generateCompanyName(), "Sole Proprietorship", []string{})
 		assert.NoError(t, err, "Failed to create company")
 
 		companyID := companyResponse["data"].(map[string]interface{})["id"].(string)
@@ -276,14 +281,20 @@ func TestAPI_Positive_Cases(t *testing.T) {
 
 	t.Run("UpdateCompany", func(t *testing.T) {
 		// Create a company to update
-		companyResponse, err := createCompany(adminToken, generateCompanyName(), "Cooperative")
+		companyResponse, err := createCompany(adminToken, generateCompanyName(), "Sole Proprietorship", []string{})
 		assert.NoError(t, err, "Failed to create company")
 
 		companyID := companyResponse["data"].(map[string]interface{})["id"].(string)
 		defer cleanupCompany(t, companyID, adminToken)
 
 		// Update company
-		updatedCompany, err := updateCompany(companyID, adminToken)
+		updatedCompany, err := updateCompany(companyID, adminToken,
+			map[string]interface{}{
+				"description":         "Updated company description",
+				"amount_of_employees": 150,
+				"registered":          false,
+				"type":                "NonProfit",
+			})
 		assert.NoError(t, err, "Failed to update company")
 		assert.Equal(t, "Updated company description", updatedCompany["data"].(map[string]interface{})["description"], "Description update mismatch")
 		assert.Equal(t, 150.0, updatedCompany["data"].(map[string]interface{})["amount_of_employees"], "Employee count update mismatch")
@@ -291,7 +302,7 @@ func TestAPI_Positive_Cases(t *testing.T) {
 
 	t.Run("DeleteCompany", func(t *testing.T) {
 		// Create a company to delete
-		companyResponse, err := createCompany(adminToken, generateCompanyName(), "Sole Proprietorship")
+		companyResponse, err := createCompany(adminToken, generateCompanyName(), "Sole Proprietorship", []string{})
 		assert.NoError(t, err, "Failed to create company")
 
 		companyID := companyResponse["data"].(map[string]interface{})["id"].(string)
@@ -314,13 +325,13 @@ func TestAPI_Negative_Cases(t *testing.T) {
 
 	t.Run("CreateCompany_Invalid_Name_length", func(t *testing.T) {
 		// Try to fetch a non-existent company
-		_, err := createCompany(adminToken, "invlida-name-length-with-more-than-15-chard", "Corporations")
+		_, err := createCompany(adminToken, "invlida-name-length-with-more-than-15-chard", "Corporations", []string{})
 		assert.Error(t, err, "Expected error when fetching a non-existent company")
 	})
 
 	t.Run("CreateCompany_Invalid_Company_Type", func(t *testing.T) {
 		// Try to create a company with an invalid type
-		_, err := createCompany(adminToken, generateCompanyName(), "Corporations-inv")
+		_, err := createCompany(adminToken, generateCompanyName(), "Corporations-inv", []string{})
 		assert.Error(t, err, "Expected error when creating a company with an invalid type")
 	})
 	t.Run("CreateCompany_InsufficientPrivileges", func(t *testing.T) {
@@ -328,13 +339,13 @@ func TestAPI_Negative_Cases(t *testing.T) {
 		readerToken, err := getJwtToken("readeruser", "reader")
 		assert.NoError(t, err, "Failed to authenticate reader")
 		// Create a company as reader
-		_, err = createCompany(readerToken, generateCompanyName(), "Corporations")
-		assert.Error(t, err, "Expected error when creating company with insufficient privileges")
+		_, err = createCompany(readerToken, generateCompanyName(), "Corporations", []string{})
+		assert.Error(t, err, "Expected error when creating company with insufficient privileges", []string{})
 	})
 
 	t.Run("UpdateCompany_InsufficientPrivileges", func(t *testing.T) {
 		// Create a company as admin for further tests
-		companyResponse, err := createCompany(adminToken, generateCompanyName(), "Corporations")
+		companyResponse, err := createCompany(adminToken, generateCompanyName(), "Corporations", []string{})
 		assert.NoError(t, err, "Failed to create company as admin")
 		companyID := companyResponse["data"].(map[string]interface{})["id"].(string)
 		defer cleanupCompany(t, companyID, adminToken)
@@ -344,13 +355,59 @@ func TestAPI_Negative_Cases(t *testing.T) {
 		assert.NoError(t, err, "Failed to authenticate reader")
 
 		// Try to update the company with insufficient privileges
-		_, err = updateCompany(companyID, readerToken)
+		_, err = updateCompany(companyID, readerToken,
+			map[string]interface{}{
+				"description":         "Updated company description",
+				"amount_of_employees": 150,
+				"registered":          false,
+				"type":                "NonProfit",
+			})
 		assert.Error(t, err, "Expected error when updating company with insufficient privileges")
+	})
+
+	t.Run("UpdateCompany_Invalid_Type", func(t *testing.T) {
+		// Create a company as admin for further tests
+		companyResponse, err := createCompany(adminToken, generateCompanyName(), "Corporations", []string{})
+		assert.NoError(t, err, "Failed to create company as admin")
+		companyID := companyResponse["data"].(map[string]interface{})["id"].(string)
+		defer cleanupCompany(t, companyID, adminToken)
+
+		_, err = updateCompany(companyID, adminToken,
+			map[string]interface{}{
+				"type": "NonProfit-1",
+			})
+		assert.Error(t, err, "Expected error when updating company with invalid field")
+	})
+
+	t.Run("UpdateCompany_Invalid_Amount_of_employees", func(t *testing.T) {
+		// Create a company as admin for further tests
+		companyResponse, err := createCompany(adminToken, generateCompanyName(), "Corporations", []string{})
+		assert.NoError(t, err, "Failed to create company as admin")
+		companyID := companyResponse["data"].(map[string]interface{})["id"].(string)
+		defer cleanupCompany(t, companyID, adminToken)
+
+		_, err = updateCompany(companyID, adminToken,
+			map[string]interface{}{
+				"amount_of_employees": 0,
+			})
+		assert.Error(t, err, "Expected error when updating company with invalid field")
+	})
+
+	t.Run("UpdateCompany_No_Fields", func(t *testing.T) {
+		// Create a company as admin for further tests
+		companyResponse, err := createCompany(adminToken, generateCompanyName(), "Corporations", []string{})
+		assert.NoError(t, err, "Failed to create company as admin")
+		companyID := companyResponse["data"].(map[string]interface{})["id"].(string)
+		defer cleanupCompany(t, companyID, adminToken)
+
+		_, err = updateCompany(companyID, adminToken,
+			map[string]interface{}{})
+		assert.Error(t, err, "Expected error when updating company with no fields")
 	})
 
 	t.Run("DeleteCompany_InsufficientPrivileges", func(t *testing.T) {
 		// Create a company as admin for further tests
-		companyResponse, err := createCompany(adminToken, generateCompanyName(), "Corporations")
+		companyResponse, err := createCompany(adminToken, generateCompanyName(), "Corporations", []string{})
 		assert.NoError(t, err, "Failed to create company as admin")
 		companyID := companyResponse["data"].(map[string]interface{})["id"].(string)
 		defer cleanupCompany(t, companyID, adminToken)
@@ -362,5 +419,23 @@ func TestAPI_Negative_Cases(t *testing.T) {
 		// Try to delete the company with insufficient privileges
 		err = deleteCompany(companyID, readerToken)
 		assert.Error(t, err, "Expected error when deleting company with insufficient privileges")
+	})
+
+	t.Run("CreateCompany_MissingFields_type", func(t *testing.T) {
+		// Create a company as admin for further tests
+		_, err := createCompany(adminToken, "", "Sole Proprietorship", []string{"type"})
+		assert.Error(t, err, "Expected error when creating company with missing field")
+	})
+
+	t.Run("CreateCompany_MissingFields_registered", func(t *testing.T) {
+		// Create a company as admin for further tests
+		_, err := createCompany(adminToken, "", "Sole Proprietorship", []string{"registered"})
+		assert.Error(t, err, "Expected error when creating company with missing field")
+	})
+
+	t.Run("CreateCompany_MissingFields_name", func(t *testing.T) {
+		// Create a company as admin for further tests
+		_, err := createCompany(adminToken, "", "Sole Proprietorship", []string{"name"})
+		assert.Error(t, err, "Expected error when creating company with missing field")
 	})
 }
